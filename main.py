@@ -1,63 +1,45 @@
-# main.py
 from pyrogram import Client, filters
-from pyrogram.types import Message
-from helpers.file_processor import process_txt_file
-from helpers.downloader import download_all_links
-from helpers.utils import ask_user_input, send_log
-
+from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 import os
-import asyncio
 
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-LOG_CHANNEL = int(os.getenv("LOG_CHANNEL"))
+# Replace these with your credentials
+API_ID = "28996064"
+API_HASH = "e09920a63e5f157b85a64ddba66596c6"
+BOT_TOKEN = "7547790773:AAEcERYFEe4CQBLqkWWj6BZrKfrF2oxzops"
 
-app = Client("video_downloader_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-
-user_settings = {}
+app = Client("drm_button_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 @app.on_message(filters.command("start"))
 async def start_handler(client, message: Message):
-    await message.reply("Welcome! Send me a `.txt` file to begin downloading links.")
+    await message.reply("Send me a .txt file with video names and DRM links.")
 
-@app.on_message(filters.command("cookies"))
-async def cookies_handler(client, message: Message):
-    if message.reply_to_message and message.reply_to_message.document:
-        path = await message.reply_to_message.download(file_name="cookies.txt")
-        user_settings[message.from_user.id] = {"cookies": path}
-        await message.reply("Cookies saved successfully.")
-    else:
-        await message.reply("Please reply to a cookies.txt file using /cookies")
-
-@app.on_message(filters.document)
+@app.on_message(filters.document & filters.private)
 async def txt_file_handler(client, message: Message):
     if not message.document.file_name.endswith(".txt"):
-        return await message.reply("Please send a `.txt` file.")
-    
+        await message.reply("Please send a valid .txt file.")
+        return
+
+    # Download the file
     file_path = await message.download()
-    user_id = message.from_user.id
-
-    # Ask for settings
-    rename_prefix = await ask_user_input(client, message, "Enter rename prefix (or type 'no'):")
-    caption_format = await ask_user_input(client, message, "Enter caption format (or type 'no'):")
-    thumbnail_link = await ask_user_input(client, message, "Send thumbnail image link (or type 'no'):")
-    quality = await ask_user_input(client, message, "Enter preferred video quality (e.g., 720p, 360p):")
-    start_index = int(await ask_user_input(client, message, "Enter the starting link number (e.g., 11):"))
-
-    user_data = {
-        "rename_prefix": rename_prefix if rename_prefix.lower() != "no" else None,
-        "caption_format": caption_format if caption_format.lower() != "no" else None,
-        "thumbnail": thumbnail_link if thumbnail_link.lower() != "no" else None,
-        "quality": quality,
-        "start_index": start_index,
-        "cookies": user_settings.get(user_id, {}).get("cookies", None)
-    }
-
-    # Process file
-    processed_lines = process_txt_file(file_path)
     
-    # Start downloading
-    await download_all_links(client, message, processed_lines, user_data, LOG_CHANNEL)
+    buttons = []
+    with open(file_path, "r", encoding="utf-8") as f:
+        lines = [line.strip() for line in f.readlines() if line.strip()]
+
+    for i in range(0, len(lines), 2):  # Assuming format: name, then link
+        if i + 1 < len(lines):
+            name = lines[i]
+            original_link = lines[i + 1]
+            playable_link = f"https://dragoapi.vercel.app/video/{original_link}"
+            buttons.append([InlineKeyboardButton(name, url=playable_link)])
+
+    # Send the buttons
+    if buttons:
+        await message.reply("Here are your video links:", reply_markup=InlineKeyboardMarkup(buttons))
+    else:
+        await message.reply("No valid links found in the file.")
+
+    # Optional: cleanup
+    os.remove(file_path)
 
 app.run()
